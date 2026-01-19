@@ -1,0 +1,7 @@
+﻿  Audio.cpp
+  Game.cpp
+C:\Users\Mikołaj Cymcio\source\repos\SpaceShooter\SpaceShooter\Game.cpp(288,39): warning C4018: '<': signed/unsigned mismatch
+  Zrodlo.cpp
+  Generating Code...
+  LINK : C:\Users\Mikołaj Cymcio\source\repos\SpaceShooter\Debug\SpaceShooter.exe not found or not built by the last incremental link; performing full link
+  SpaceShooter.vcxproj -> C:\Users\Mikołaj Cymcio\source\repos\SpaceShooter\Debug\SpaceShooter.exe
