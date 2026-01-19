@@ -1,0 +1,3 @@
+﻿  Game.cpp
+C:\Users\Mikołaj Cymcio\source\repos\SpaceShooter\SpaceShooter\Game.cpp(288,39): warning C4018: '<': signed/unsigned mismatch
+  SpaceShooter.vcxproj -> C:\Users\Mikołaj Cymcio\source\repos\SpaceShooter\Debug\SpaceShooter.exe
