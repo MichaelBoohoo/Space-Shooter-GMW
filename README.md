@@ -42,6 +42,7 @@ Kliknij Prawym na folder "Pliki źródłowe" (Source Files) -> Dodaj -> Istniej�
 Instrukcja konfiguracji SFML w Visual Studio 
 
 Założenie
+
 Masz już pobraną bibliotekę SFML na dysku (np. na dysku C:\SFML). Jeśli nie, musisz ją pobrać ze strony sfml-dev.org (wersja Visual C++).
 
 1: Otwórz właściwości projektu
