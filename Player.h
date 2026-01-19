@@ -1,78 +1,86 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include <string>
+#include <iostream>
+#include <vector>
 
 class Player
 {
 private:
     sf::RectangleShape kwadrat;
     sf::Texture texture;
-    int currentSkinID;
+
     float movementSpeed;
 
-
+    // Statystyki
     int hp;
     int hpMax;
     int punkty;
 
-    std::string nick;
+    // Poziomy ulepszeń
+    int speedLevel;
+    int hpLevel;
 
-    // --- ZMIENNE DO ZAPISU I SKLEPU ---
-    int colorID;    // 0 = zielony, 1 = niebieski, 2 = zolty etc.
-    int speedLevel; // poziom szybkosci
-    int hpLevel;    // poziom ulepszenia HP
+    // Wygląd
+    int colorID;       // Aktualny kolor/skin ID
+    int currentSkinID; // Pomocnicza do logiki
+
+    // System skórek - wektor przechowywujący stan (0 - nieposiadany, 1 - posiadany)
+    std::vector<int> ownedSkins;
+
+    // Dane gracza
+    std::string nick;
 
     void initZmienne_Player();
     void initKsztalt();
 
 public:
-    Player(float x = 0.f, float y = 0.f);
+    Player(float x, float y);
     virtual ~Player();
 
-    // Settery i Gettery
-    void setNick(std::string n) { this->nick = n; }
-    std::string getNick() const { return this->nick; }
+    // Resetowanie
+    void reset();           // Resetuje HP (po wczytaniu/śmierci)
+    void resetAllStats();   // Resetuje wszystko do zera (nowy gracz)
 
-    const int& getHP() const { return this->hp; }
-    const int& getHPMax() const { return this->hpMax; }
-    const int& getPunkty() const { return this->punkty; }
+    // Accessors (Gettery)
+    sf::RectangleShape& getShape();
+    const sf::FloatRect getGlobalBounds() const;
+    const sf::Vector2f getPosition() const;
+    const float getX() const;
+    const float getY() const;
 
-    // Funkcje dla sklepu i zapisu
-    int getSkinID() const { return this->colorID; }
-    int getSpeedLevel() const { return this->speedLevel; }
-    int getHpLevel() const { return this->hpLevel; }
+    const int getHP() const;
+    const int getHPMax() const;
+    const int getPunkty() const;
+    const std::string getNick() const;
 
-    // Funkcje modyfikujące (np. przy wczytywaniu gry)
-    void setPunkty(int v) { this->punkty = v; }
-    void setHpMax(int v) { this->hpMax = v; }
-    void setSpeed(float v) { this->movementSpeed = v; }
+    // Do zapisu gry
+    const int getSpeedLevel() const;
+    const int getHpLevel() const;
+    const int getSkinID() const;
+
+    // --- NOWE METODY DO SKÓREK ---
+    bool czyPosiadaSkin(int id) const;
+    void odblokujSkin(int id);
+    // -----------------------------
+
+    // Modifiers (Settery / Akcje)
+    void setNick(std::string n);
+    void setPunkty(int p);
+    void setHpMax(int h);
+    void setSpeed(float s);
+
+    void dodajPunkty(int p);
+    void wydajPunkty(int p);
+    void otrzymajObrazenia(int damage);
+
+    // Ulepszenia
+    void ulepszHP();
+    void ulepszSpeed();
 
     // Zmiana wyglądu
-    void zmienSkorke(int id); // Zmieniamy nazwę z zmienKolor na zmienSkorke
-    sf::RectangleShape& getShape();
+    void zmienSkorke(int id);
 
-    // Logika gry
-    void dodajPunkty(int ilosc) { this->punkty += ilosc; }
-    void wydajPunkty(int ilosc) { this->punkty -= ilosc; }
-    void otrzymajObrazenia(int ilosc) { this->hp -= ilosc; if (this->hp < 0) this->hp = 0; }
-    void ulecz(int ilosc) { this->hp += ilosc; if (this->hp > this->hpMax) this->hp = this->hpMax; }
-
-    // Zakup ulepszeń
-    void ulepszSpeed() { this->speedLevel++; this->movementSpeed += 1.f; }
-    void ulepszHP() { this->hpLevel++; this->hpMax += 5; this->hp = this->hpMax; }
-
-    // --- RESETOWANIE ---
-    // Resetuje HP do max (dla nowej rundy)
-    void reset() { this->hp = this->hpMax; }
-    // NOWA FUNKCJA: Resetuje wszystko do zera (dla nowego profilu)
-    void resetAllStats();
-
+    // Update & Render
     void update_Player();
     void render_Player(sf::RenderTarget& okno);
-
-    // Gettery do kształtu (dla kolizji)
-
-    float getX() const { return kwadrat.getPosition().x; }
-    float getY() const { return kwadrat.getPosition().y; }
-    sf::FloatRect getGlobalBounds() const { return kwadrat.getGlobalBounds(); }
 };

@@ -72,7 +72,10 @@ private:
     // Tło
     int bgID; // 0=black, 1=fiolet, 2=granat, 3=braz
     sf::Color backgroundColor;
-
+    sf::Texture backgroundTexture;
+    sf::Sprite backgroundSprite1;
+    sf::Sprite backgroundSprite2; // Drugi sprite do płynnego zapętlenia
+    float backgroundSpeed = 100.f; // Prędkość przewijania
     // Funkcje inicjalizujące
     void initZmienne();
     void initOkno();

@@ -5,14 +5,14 @@
 // ---------------- CONSTRUCTOR ----------------
 
 WaveManager::WaveManager(std::vector<Enemy>& e)
-: enemies(e)
+    : enemies(e)
 {
-    bossHpBack.setSize({200.f, 10.f});
-    bossHpFront.setSize({200.f, 10.f});
-    bossHpBack.setFillColor(sf::Color(60,60,60));
+    bossHpBack.setSize({ 200.f, 10.f });
+    bossHpFront.setSize({ 200.f, 10.f });
+    bossHpBack.setFillColor(sf::Color(60, 60, 60));
     bossHpFront.setFillColor(sf::Color::Red);
-    bossHpBack.setPosition({300, 20});
-    bossHpFront.setPosition({300, 20});
+    bossHpBack.setPosition({ 300, 20 });
+    bossHpFront.setPosition({ 300, 20 });
 
     spawnWave1();
 }
@@ -21,7 +21,8 @@ WaveManager::WaveManager(std::vector<Enemy>& e)
 
 void WaveManager::update(float dt, std::vector<EnemyBullet>& enemyBullets)
 {
-    if (wave == 0) {
+    // Logika ruchu dla zwykłych fal (lewo-prawo)
+    if (wave == 0 || wave == 1 || wave == 2) {
         bool edge = false;
         for (auto& e : enemies) {
             e.shape.move(enemyDir * dt);
@@ -32,15 +33,19 @@ void WaveManager::update(float dt, std::vector<EnemyBullet>& enemyBullets)
         if (edge) enemyDir.x = -enemyDir.x;
     }
 
+    // Logika ruchu Bossa (sinusoida)
     if (wave == 3 && !enemies.empty()) {
         bossTime += dt;
         float x = 330 + std::sin(bossTime * 1.5f) * 200.f;
-        enemies[0].shape.setPosition({x, 80});
+        // Boss jest zawsze pierwszy w wektorze w tej fali
+        enemies[0].shape.setPosition({ x, 80 });
     }
 
+    // Aktualizacja każdego wroga i strzelanie
     for (auto& e : enemies) {
         e.update(dt);
 
+        // Strzelanie fioletowych (Type 2)
         if (e.type == 2 && rand() % 1000 < 10)
             enemyBullets.emplace_back(
                 e.shape.getPosition().x + 20,
@@ -48,9 +53,11 @@ void WaveManager::update(float dt, std::vector<EnemyBullet>& enemyBullets)
                 300.f
             );
 
+        // Strzelanie Bossa (Type 3)
         if (e.type == 3 && e.shootTimer > 0.6f) {
             float x = e.shape.getPosition().x + 70;
             float y = e.shape.getPosition().y + 90;
+            // Trzy pociski na raz
             enemyBullets.emplace_back(x - 30, y, 500.f);
             enemyBullets.emplace_back(x, y, 500.f);
             enemyBullets.emplace_back(x + 30, y, 500.f);
@@ -74,7 +81,7 @@ void WaveManager::nextWave()
 void WaveManager::spawnWave1()
 {
     enemies.clear();
-    enemyDir = {80.f, 0.f};
+    enemyDir = { 80.f, 0.f };
 
     for (int r = 0; r < 2; r++)
         for (int c = 0; c < 6; c++)
@@ -84,6 +91,7 @@ void WaveManager::spawnWave1()
 void WaveManager::spawnWave2()
 {
     enemies.clear();
+    enemyDir = { 100.f, 0.f }; // Trochę szybciej dla 2 fali
     std::vector<sf::Vector2f> pos = {
         {400,100},{350,150},{450,150},
         {300,200},{400,200},{500,200}
@@ -95,6 +103,7 @@ void WaveManager::spawnWave2()
 void WaveManager::spawnWave3()
 {
     enemies.clear();
+    enemyDir = { 120.f, 0.f };
     std::vector<sf::Vector2f> pos = {
         {300,100},{500,100},
         {330,150},{470,150},
@@ -109,7 +118,7 @@ void WaveManager::spawnBoss()
 {
     enemies.clear();
     bossTime = 0.f;
-    enemies.emplace_back(330, 80, 3);
+    enemies.emplace_back(330, 80, 3); // Type 3 = Boss
 }
 
 // ---------------- DRAW BOSS HP ----------------
@@ -118,10 +127,13 @@ void WaveManager::drawBossHP(sf::RenderTarget& window)
 {
     for (auto& e : enemies) {
         if (e.type == 3) {
-            bossHpFront.setSize({200.f * (e.hp / 30.f), 10.f});
+            // Skalowanie paska życia
+            float percent = (float)e.hp / 30.f;
+            if (percent < 0) percent = 0;
+            bossHpFront.setSize({ 200.f * percent, 10.f });
+
             window.draw(bossHpBack);
             window.draw(bossHpFront);
         }
     }
 }
-

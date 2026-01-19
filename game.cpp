@@ -3,9 +3,8 @@
 #include <iostream>
 
 // ============================
-// SAVE / LOAD SYSTEM
+// SAVE/LOAD SYSTEM
 // ============================
-
 void game::saveGame()
 {
     // Zabezpieczenie: nie zapisuj, jeśli nick jest pusty
@@ -13,22 +12,26 @@ void game::saveGame()
 
     // Tworzymy nazwę pliku na podstawie nicku, np. "Adam.txt"
     std::string fileName = gracz->getNick() + ".txt";
-
     std::ofstream file(fileName);
+
     if (file.is_open())
     {
-        // Kolejność: Nick Punkty MaxHP SpeedLevel HPLevel ColorID BgID
+        // Kolejność: Nick Punkty MaxHP SpeedLevel HPLevel ColorID BgID Skin1Owned Skin2Owned Skin3Owned
         file << gracz->getNick() << " "
             << gracz->getPunkty() << " "
             << gracz->getHPMax() << " "
             << gracz->getSpeedLevel() << " "
             << gracz->getHpLevel() << " "
             << gracz->getSkinID() << " "
-            << this->bgID;
+            << this->bgID << " "
+            // Zapisujemy, czy gracz ma skiny (0 lub 1). Skin 0 zawsze jest 1, więc zapiszmy 1, 2, 3
+            << (gracz->czyPosiadaSkin(1) ? 1 : 0) << " "
+            << (gracz->czyPosiadaSkin(2) ? 1 : 0) << " "
+            << (gracz->czyPosiadaSkin(3) ? 1 : 0);
 
-        file.close();
-        std::cout << "Zapisano gre do pliku: " << fileName << std::endl;
     }
+    file.close();
+    std::cout << "Zapisano gre do pliku: " << fileName << std::endl;
 }
 
 void game::loadGame()
@@ -44,8 +47,10 @@ void game::loadGame()
     {
         std::string n;
         int pts, hpMx, spdLvl, hpLvl, skinID, bID;
+        int s1, s2, s3; // Zmienne na status skórek
 
-        // Czytamy dane w tej samej kolejności
+        // Czytamy dane
+        // Próba wczytania podstawowych danych
         if (file >> n >> pts >> hpMx >> spdLvl >> hpLvl >> skinID >> bID)
         {
             gracz->setNick(n);
@@ -56,9 +61,21 @@ void game::loadGame()
             // Resetujemy prędkość i nakładamy ulepszenia
             gracz->setSpeed(5.f + (spdLvl - 1) * 1.f);
 
-            // Kolor i tło
-            gracz->zmienSkorke(skinID);
+            // Tło
             this->setBackground(bID);
+
+            // -- WCZYTYWANIE SKÓREK --
+            // Próbujemy wczytać statusy skórek. Jeśli plik jest stary i ich nie ma, 
+            // strumień wejdzie w stan błędu, ale podstawowe dane już są wczytane.
+            if (file >> s1 >> s2 >> s3) {
+                if (s1 == 1) gracz->odblokujSkin(1);
+                if (s2 == 1) gracz->odblokujSkin(2);
+                if (s3 == 1) gracz->odblokujSkin(3);
+            }
+            // ------------------------
+
+            // Ustawiamy skórkę na końcu (musi być odblokowana wcześniej)
+            gracz->zmienSkorke(skinID);
 
             std::cout << "Wczytano profil: " << n << std::endl;
         }
@@ -69,10 +86,9 @@ void game::loadGame()
         // JEŚLI PLIK NIE ISTNIEJE -> NOWY GRACZ
         std::cout << "Brak zapisu dla gracza " << nickToLoad << ". Tworze nowy profil." << std::endl;
 
-        // Ważne: Resetujemy gracza do zera, żeby nie miał statystyk z poprzedniej sesji
+        // Ważne: Resetujemy gracza do zera
         gracz->resetAllStats();
         gracz->setNick(nickToLoad);
-
         // Resetujemy też tło na domyślne
         this->setBackground(0);
     }
@@ -81,19 +97,33 @@ void game::loadGame()
 void game::setBackground(int id)
 {
     this->bgID = id;
-    switch (id)
+    std::string fileName = "bg" + std::to_string(id) + ".png";
+
+    // Próba załadowania wybranego tła
+    if (!this->backgroundTexture.loadFromFile(fileName))
     {
-    case 0: backgroundColor = sf::Color::Black; break;
-    case 1: backgroundColor = sf::Color(50, 0, 50); break; // Ciemny fiolet
-    case 2: backgroundColor = sf::Color(0, 0, 50); break;  // Ciemny granat
-    case 3: backgroundColor = sf::Color(50, 20, 0); break; // Ciemny brąz
-    default: backgroundColor = sf::Color::Black; break;
+        // JEŚLI SIĘ NIE UDA (np. brak bg1.png), SPRÓBUJ ZAŁADOWAĆ bg0.png
+        std::cout << "Nie znaleziono " << fileName << ", laduje bg0.png" << std::endl;
+        if (!this->backgroundTexture.loadFromFile("bg0.png"))
+        {
+            std::cout << "ERROR: KRYTYCZNY BLAD - BRAK bg0.png!" << std::endl;
+            return;
+        }
     }
+
+    // Ustawienie tekstury (musi być smooth dla płynnego ruchu)
+    this->backgroundTexture.setSmooth(true);
+    this->backgroundSprite1.setTexture(backgroundTexture);
+    this->backgroundSprite2.setTexture(backgroundTexture);
+
+    // Pozycje startowe
+    this->backgroundSprite1.setPosition(0, 0);
+    this->backgroundSprite2.setPosition(0, -600.f);
 }
 
-// ============================
+// ============
 // INIT & KONSTRUKTOR
-// ============================
+// ============
 
 void game::initZmienne()
 {
@@ -123,6 +153,7 @@ void game::initManagers()
         doubleShotTimer, fastShotTimer, shieldTimer, POWERUP_DURATION
     );
 }
+
 void game::initHUD()
 {
     // Ładowanie czcionki
@@ -140,15 +171,11 @@ void game::initHUD()
     powerUpBar.setFillColor(sf::Color::Green);
 
     // --- ŁADOWANIE LOGA ---
-    // Upewnij się, że plik nazywa się logo.png (lub zmień nazwę tutaj)
     if (!logoTexture.loadFromFile("logo.png")) {
         std::cout << "ERROR: Nie znaleziono logo.png! Uzywam tekstu zastepczego." << std::endl;
     }
     else {
         logoSprite.setTexture(logoTexture);
-
-        // Opcjonalnie: Skalowanie, jeśli logo jest za duże/za małe
-        // np. logoSprite.setScale(0.5f, 0.5f); 
     }
 }
 
@@ -159,18 +186,17 @@ void game::initButtons()
     this->btnStart.setFillColor(sf::Color(0, 100, 0)); // Ciemny zielony
     this->btnStart.setOutlineThickness(2.f);
     this->btnStart.setOutlineColor(sf::Color::White);
-    // Ustawimy pozycję później w render, ale warto dać domyślną
     this->btnStart.setPosition(290.f, 400.f);
 
     this->textStart.setFont(font);
     this->textStart.setString("START");
     this->textStart.setCharacterSize(30);
     this->textStart.setFillColor(sf::Color::White);
-    // Centrowanie napisu na przycisku
+
     sf::FloatRect textRect = textStart.getLocalBounds();
     textStart.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
-    textStart.setPosition(btnStart.getPosition().x + btnStart.getSize().x / 2.f, btnStart.getPosition().y + btnStart.getSize().y / 2.f);
-
+    textStart.setPosition(btnStart.getPosition().x + btnStart.getSize().x / 2.f,
+        btnStart.getPosition().y + btnStart.getSize().y / 2.f);
 
     // === PRZYCISK PROFIL ===
     this->btnProfile.setSize(sf::Vector2f(200.f, 60.f));
@@ -186,7 +212,8 @@ void game::initButtons()
 
     textRect = textProfile.getLocalBounds();
     textProfile.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
-    textProfile.setPosition(btnProfile.getPosition().x + btnProfile.getSize().x / 2.f, btnProfile.getPosition().y + btnProfile.getSize().y / 2.f);
+    textProfile.setPosition(btnProfile.getPosition().x + btnProfile.getSize().x / 2.f,
+        btnProfile.getPosition().y + btnProfile.getSize().y / 2.f);
 }
 
 game::game()
@@ -197,9 +224,7 @@ game::game()
     this->initManagers();
     this->initHUD();
     this->initButtons();
-
-    // UWAGA: Usunąłem stąd loadGame()! 
-    // Nie wiemy jeszcze kogo wczytać. Zrobimy to po wpisaniu nicku.
+    this->setBackground(0);
 }
 
 game::~game()
@@ -219,7 +244,6 @@ const bool game::OknoOtwarte() const
 // ============================
 // UPDATE EVENTS
 // ============================
-
 void game::updateEvent()
 {
     while (this->okno->pollEvent(this->event))
@@ -228,35 +252,35 @@ void game::updateEvent()
         if (this->event.type == sf::Event::Closed)
             this->okno->close();
 
-        // 2. POBRANIE POZYCJI MYSZKI (potrzebne do przycisków)
+        // 2. POBRANIE POZYCJI MYSZKI
         sf::Vector2i mousePosWindow = sf::Mouse::getPosition(*this->okno);
         sf::Vector2f mousePosView = this->okno->mapPixelToCoords(mousePosWindow);
 
         // --- STAN: MENU GŁÓWNE ---
         if (this->state == GameState::MENU)
         {
-            // Sprawdzanie najechania myszką (Efekt Hover)
+            // Efekt Hover
             if (btnStart.getGlobalBounds().contains(mousePosView))
-                btnStart.setFillColor(sf::Color(0, 180, 0)); // Jasnozielony
+                btnStart.setFillColor(sf::Color(0, 180, 0));
             else
-                btnStart.setFillColor(sf::Color(0, 100, 0)); // Ciemnozielony
+                btnStart.setFillColor(sf::Color(0, 100, 0));
 
             if (btnProfile.getGlobalBounds().contains(mousePosView))
-                btnProfile.setFillColor(sf::Color(0, 0, 180)); // Jasnoniebieski
+                btnProfile.setFillColor(sf::Color(0, 0, 180));
             else
-                btnProfile.setFillColor(sf::Color(0, 0, 100)); // Ciemnoniebieski
+                btnProfile.setFillColor(sf::Color(0, 0, 100));
 
-            // Obsługa kliknięć w przyciski
+            // Kliknięcie
             if (this->event.type == sf::Event::MouseButtonPressed && this->event.mouseButton.button == sf::Mouse::Left)
             {
                 if (btnStart.getGlobalBounds().contains(mousePosView))
                 {
-                    this->nextStateAfterLogin = GameState::PLAYING; // Po loginie idź do gry
+                    this->nextStateAfterLogin = GameState::PLAYING;
                     this->state = GameState::LOGIN;
                 }
                 else if (btnProfile.getGlobalBounds().contains(mousePosView))
                 {
-                    this->nextStateAfterLogin = GameState::PROFILE; // Po loginie idź do profilu
+                    this->nextStateAfterLogin = GameState::PROFILE;
                     this->state = GameState::LOGIN;
                 }
             }
@@ -265,28 +289,25 @@ void game::updateEvent()
         // --- STAN: LOGIN (Wpisywanie Nicku) ---
         else if (this->state == GameState::LOGIN)
         {
-            // Obsługa wpisywania znaków
             if (this->event.type == sf::Event::TextEntered)
             {
-                // Enter - Zatwierdzenie
+                // Enter
                 if (this->event.text.unicode == 13 && !inputNick.empty())
                 {
-                    this->loadGame(); // Wczytaj postęp dla tego nicku
-                    this->state = this->nextStateAfterLogin; // Przejdź tam gdzie wybrano w menu
+                    this->loadGame();
+                    this->state = this->nextStateAfterLogin;
                 }
-                // Backspace - Usuwanie
+                // Backspace
                 else if (this->event.text.unicode == 8 && !inputNick.empty())
                 {
                     inputNick.pop_back();
                 }
-                // Litery i cyfry (limit do 12 znaków)
+                // Litery i cyfry
                 else if (this->event.text.unicode < 128 && this->event.text.unicode > 31 && inputNick.length() < 12)
                 {
                     inputNick += static_cast<char>(this->event.text.unicode);
                 }
             }
-
-            // ESC - Powrót do menu głównego
             if (this->event.type == sf::Event::KeyPressed && this->event.key.code == sf::Keyboard::Escape)
             {
                 this->state = GameState::MENU;
@@ -298,7 +319,7 @@ void game::updateEvent()
         {
             if (this->event.type == sf::Event::KeyPressed)
             {
-                // Wyjście do menu z zapisem
+                // Wyjście do menu
                 if (this->event.key.code == sf::Keyboard::Escape)
                 {
                     this->saveGame();
@@ -311,14 +332,51 @@ void game::updateEvent()
                 if (this->event.key.code == sf::Keyboard::Num3) this->setBackground(2);
                 if (this->event.key.code == sf::Keyboard::Num4) this->setBackground(3);
 
-                // Zmiana koloru gracza (klawisze F1-F4)
-                // Wewnątrz updateEvent() -> state == GameState::PROFILE
-                if (this->event.key.code == sf::Keyboard::F1) this->gracz->zmienSkorke(0);
-                if (this->event.key.code == sf::Keyboard::F2) this->gracz->zmienSkorke(1);
-                if (this->event.key.code == sf::Keyboard::F3) this->gracz->zmienSkorke(2);
-                if (this->event.key.code == sf::Keyboard::F4) this->gracz->zmienSkorke(3);
+                // --- OBSŁUGA KUPOWANIA SKÓREK (F1 - F4) ---
 
-                // Zakupy w sklepie
+                // F1: Skin 0 (Zawsze darmowy)
+                if (this->event.key.code == sf::Keyboard::F1) {
+                    this->gracz->zmienSkorke(0);
+                }
+
+                // F2: Skin 1 (Cena: 1000)
+                if (this->event.key.code == sf::Keyboard::F2) {
+                    if (gracz->czyPosiadaSkin(1)) {
+                        gracz->zmienSkorke(1);
+                    }
+                    else if (gracz->getPunkty() >= 1000) {
+                        gracz->wydajPunkty(1000);
+                        gracz->odblokujSkin(1);
+                        gracz->zmienSkorke(1);
+                    }
+                }
+
+                // F3: Skin 2 (Cena: 3000)
+                if (this->event.key.code == sf::Keyboard::F3) {
+                    if (gracz->czyPosiadaSkin(2)) {
+                        gracz->zmienSkorke(2);
+                    }
+                    else if (gracz->getPunkty() >= 3000) {
+                        gracz->wydajPunkty(3000);
+                        gracz->odblokujSkin(2);
+                        gracz->zmienSkorke(2);
+                    }
+                }
+
+                // F4: Skin 3 (Cena: 5000)
+                if (this->event.key.code == sf::Keyboard::F4) {
+                    if (gracz->czyPosiadaSkin(3)) {
+                        gracz->zmienSkorke(3);
+                    }
+                    else if (gracz->getPunkty() >= 5000) {
+                        gracz->wydajPunkty(5000);
+                        gracz->odblokujSkin(3);
+                        gracz->zmienSkorke(3);
+                    }
+                }
+                // ------------------------------------------
+
+                // Zakupy statystyk
                 // HP (Koszt 500)
                 if (this->event.key.code == sf::Keyboard::B && gracz->getPunkty() >= 500)
                 {
@@ -339,8 +397,8 @@ void game::updateEvent()
         {
             if (this->event.type == sf::Event::KeyPressed && this->event.key.code == sf::Keyboard::Escape)
             {
-                this->saveGame();     // Zapisz wynik przed wyjściem
-                this->gracz->reset(); // Przywróć HP do max na następny raz
+                this->saveGame();
+                this->gracz->reset();
                 this->state = GameState::MENU;
             }
         }
@@ -350,7 +408,6 @@ void game::updateEvent()
 // ============================
 // UPDATE LOGIC
 // ============================
-
 void game::update()
 {
     this->updateEvent();
@@ -358,8 +415,20 @@ void game::update()
     if (this->state == GameState::PLAYING)
     {
         float dt = 1.f / 60.f;
+
+        // Ruch tła
+        this->backgroundSprite1.move(0.f, backgroundSpeed * dt);
+        this->backgroundSprite2.move(0.f, backgroundSpeed * dt);
+
+        if (this->backgroundSprite1.getPosition().y >= 600.f)
+            this->backgroundSprite1.setPosition(0.f, -600.f);
+        if (this->backgroundSprite2.getPosition().y >= 600.f)
+            this->backgroundSprite2.setPosition(0.f, -600.f);
+
+        // Gracz
         this->gracz->update_Player();
 
+        // Strzelanie
         shootTimer += dt;
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Space) && shootTimer >= shootCooldown)
         {
@@ -373,6 +442,7 @@ void game::update()
             shootTimer = 0.f;
         }
 
+        // Aktualizacje obiektów
         for (auto& b : bullets) b.update(dt);
         for (auto& eb : enemyBullets) eb.update(dt);
         for (auto& p : powerUps) p.update(dt);
@@ -442,9 +512,9 @@ void game::update()
 // ============================
 // RENDERERS
 // ============================
+
 void game::renderMenu()
 {
-    // 1. RYSOWANIE LOGA (Na samej górze, czysto)
     if (logoTexture.getSize().x > 0)
     {
         float logoX = (800.f / 2.f) - (logoSprite.getGlobalBounds().width / 2.f);
@@ -452,21 +522,21 @@ void game::renderMenu()
         this->okno->draw(logoSprite);
     }
 
-    // 2. PRZYCISKI (Wyśrodkowane pod logo)
     btnStart.setPosition(400.f - 210.f, 400.f);
     this->okno->draw(btnStart);
-    textStart.setPosition(btnStart.getPosition().x + btnStart.getSize().x / 2.f, btnStart.getPosition().y + btnStart.getSize().y / 2.f);
+    textStart.setPosition(btnStart.getPosition().x + btnStart.getSize().x / 2.f,
+        btnStart.getPosition().y + btnStart.getSize().y / 2.f);
     this->okno->draw(textStart);
 
     btnProfile.setPosition(400.f + 10.f, 400.f);
     this->okno->draw(btnProfile);
-    textProfile.setPosition(btnProfile.getPosition().x + btnProfile.getSize().x / 2.f, btnProfile.getPosition().y + btnProfile.getSize().y / 2.f);
+    textProfile.setPosition(btnProfile.getPosition().x + btnProfile.getSize().x / 2.f,
+        btnProfile.getPosition().y + btnProfile.getSize().y / 2.f);
     this->okno->draw(textProfile);
 }
 
 void game::renderLogin()
 {
-    // Ciemna nakładka na tło (opcjonalnie)
     sf::RectangleShape overlay(sf::Vector2f(800.f, 600.f));
     overlay.setFillColor(sf::Color(0, 0, 0, 200));
     this->okno->draw(overlay);
@@ -475,7 +545,6 @@ void game::renderLogin()
     powerUpText.setFillColor(sf::Color::White);
     powerUpText.setString("LOGOWANIE PROFILU");
 
-    // Centrowanie tekstu
     sf::FloatRect tr = powerUpText.getLocalBounds();
     powerUpText.setOrigin(tr.width / 2.f, tr.height / 2.f);
     powerUpText.setPosition(400.f, 200.f);
@@ -486,7 +555,6 @@ void game::renderLogin()
     powerUpText.setPosition(400.f, 260.f);
     this->okno->draw(powerUpText);
 
-    // Pole na Nick
     sf::RectangleShape inputField(sf::Vector2f(300.f, 50.f));
     inputField.setFillColor(sf::Color(50, 50, 50));
     inputField.setOutlineThickness(2.f);
@@ -495,10 +563,9 @@ void game::renderLogin()
     inputField.setPosition(400.f, 320.f);
     this->okno->draw(inputField);
 
-    // Wpisany tekst
     powerUpText.setCharacterSize(30);
     powerUpText.setFillColor(sf::Color::Yellow);
-    powerUpText.setString(inputNick + (((int)(shootTimer * 4) % 2 == 0) ? "_" : "")); // Prosty migający kursor
+    powerUpText.setString(inputNick + (((int)(shootTimer * 4) % 2 == 0) ? "_" : ""));
     tr = powerUpText.getLocalBounds();
     powerUpText.setOrigin(tr.width / 2.f, tr.height / 2.f);
     powerUpText.setPosition(400.f, 315.f);
@@ -515,51 +582,59 @@ void game::renderLogin()
 
 void game::renderProfile()
 {
+    powerUpText.setOrigin(0.f, 0.f);
+    powerUpText.setCharacterSize(22);
+    powerUpText.setPosition(30.f, 30.f);
+
+    std::string info = "=== PROFIL GRACZA: " + gracz->getNick() + " ===\n";
+    info += "Punkty: " + std::to_string(gracz->getPunkty()) + "\n\n";
+
+    info += "=== SKLEP SKOREK ===\n";
+
+    // Helper do wyświetlania cen/statusu
+    auto getSkinStatus = [&](int id, int price) -> std::string {
+        if (gracz->getSkinID() == id) return " [WYBRANY]";
+        if (gracz->czyPosiadaSkin(id)) return " [POSIADANE]";
+        return " [Cena: " + std::to_string(price) + "]";
+        };
+
+    info += "[F1] Default" + getSkinStatus(0, 0) + "\n";
+    info += "[F2] Skin 1 " + getSkinStatus(1, 1000) + "\n";
+    info += "[F3] Skin 2 " + getSkinStatus(2, 3000) + "\n";
+    info += "[F4] Skin 3 " + getSkinStatus(3, 5000) + "\n\n";
+
+    info += "=== WYGLAD TLA ===\n";
+    info += "[1-4] Tlo (ID: " + std::to_string(bgID) + ")\n\n";
+
+    info += "=== SKLEP STATYSTYK ===\n";
+    info += "[B] HP (+5) - 500 pkt (Lvl: " + std::to_string(gracz->getHpLevel()) + ")\n";
+    info += "[N] Speed (+1) - 1000 pkt (Lvl: " + std::to_string(gracz->getSpeedLevel()) + ")\n\n";
+
+    info += "[ESC] Powrot i Zapis";
+
     powerUpText.setCharacterSize(20);
-    powerUpText.setPosition(50.f, 50.f);
-
-    std::string info = "=== PROFIL GRACZA ===\n";
-    info += "Nick: " + gracz->getNick() + "\n";
-    info += "Dostepne Punkty: " + std::to_string(gracz->getPunkty()) + "\n\n";
-
-    info += "=== WYGLAD ===\n";
-    info += "[1-4] Zmien Tlo (Aktualne ID: " + std::to_string(bgID) + ")\n";
-    info += "[F1-F4] Zmien Kolor Gracza (Aktualne ID: " + std::to_string(gracz->getSkinID()) + ")\n\n";
-
-    info += "=== SKLEP (ULEPSZENIA) ===\n";
-    info += "[B] Kup wiecej HP (+5 Max HP) - Koszt: 500 pkt\n";
-    info += "    Aktualny poziom HP: " + std::to_string(gracz->getHpLevel()) + " (Max HP: " + std::to_string(gracz->getHPMax()) + ")\n";
-    info += "[N] Kup Szybkosc (+1 Speed) - Koszt: 1000 pkt\n";
-    info += "    Aktualny poziom Speed: " + std::to_string(gracz->getSpeedLevel()) + "\n\n";
-
-    info += "[ESC] Wroc do MENU (Gra zostanie zapisana)";
-
+    powerUpText.setPosition(20.f, 20.f);
     powerUpText.setString(info);
     this->okno->draw(powerUpText);
 
-    // Rysowanie podglądu gracza w profilu
+    // Podgląd gracza
     sf::RectangleShape preview = gracz->getShape();
-    preview.setPosition(500, 100);
-    preview.setSize({ 100, 100 });
+    preview.setPosition(500.f, 150.f);
+    preview.setSize({ 150.f, 150.f });
     this->okno->draw(preview);
-
-    
-        // ... reszta kodu renderowania ...
-        std::string s = "PROFIL: " + gracz->getNick() + "\nPUNKTY: " + std::to_string(gracz->getPunkty());
-        s += "\n\n[1-4] TLO  [F1-F4] WYBIERZ SKIN\n[B] HP (500pkt)  [N] SPEED (1000pkt)\n\nESC - POWROT";
-        powerUpText.setString(s);
-        this->okno->draw(powerUpText);
-    
 }
 
 void game::renderHUD()
 {
+    powerUpText.setOrigin(0.f, 0.f);
+
     sf::RectangleShape hudBg({ 800.f, 30.f });
     hudBg.setFillColor(sf::Color(0, 0, 0, 150));
     hudBg.setPosition(0, 0);
     this->okno->draw(hudBg);
 
     powerUpText.setCharacterSize(20);
+    powerUpText.setFillColor(sf::Color::White);
     powerUpText.setString("GRACZ: " + gracz->getNick() + " | PUNKTY: " + std::to_string(gracz->getPunkty()));
     powerUpText.setPosition(10.f, 5.f);
     this->okno->draw(powerUpText);
@@ -571,7 +646,7 @@ void game::renderHUD()
     this->okno->draw(hpBack);
 
     float hpPercent = (float)gracz->getHP() / (float)gracz->getHPMax();
-    if (hpPercent < 0) hpPercent = 0; // zabezpieczenie graficzne
+    if (hpPercent < 0) hpPercent = 0;
 
     sf::RectangleShape hpFront({ 200.f * hpPercent, 20.f });
     hpFront.setFillColor(sf::Color::Red);
@@ -619,17 +694,13 @@ void game::renderEndScreen()
 
     powerUpText.setString(msg);
     this->okno->draw(powerUpText);
-
-    // Reset origin po rysowaniu, żeby nie psuć innych tekstów
     powerUpText.setOrigin(0, 0);
 }
 
 void game::render()
 {
-    // 1. Czyścimy okno kolorem tła wybranym w profilu
-    this->okno->clear(this->backgroundColor);
+    this->okno->clear();
 
-    // 2. Wybieramy co narysować na podstawie aktualnego stanu
     if (this->state == GameState::MENU)
     {
         this->renderMenu();
@@ -640,19 +711,20 @@ void game::render()
     }
     else if (this->state == GameState::PROFILE)
     {
+        this->powerUpText.setOrigin(0.f, 0.f);
         this->renderProfile();
     }
     else if (this->state == GameState::PLAYING)
     {
-        // Rysowanie obiektów świata gry
-        this->gracz->render_Player(*okno);
+        this->okno->draw(this->backgroundSprite1);
+        this->okno->draw(this->backgroundSprite2);
 
+        this->gracz->render_Player(*okno);
         for (auto& b : bullets) this->okno->draw(b.shape);
         for (auto& eb : enemyBullets) this->okno->draw(eb.shape);
         for (auto& e : enemies) this->okno->draw(e.shape);
         for (auto& p : powerUps) this->okno->draw(p.shape);
 
-        // Elementy interfejsu w trakcie walki
         waveManager->drawBossHP(*okno);
         this->renderHUD();
     }
@@ -661,7 +733,5 @@ void game::render()
         this->renderEndScreen();
     }
 
-    // 3. Wyświetlamy wszystko na ekranie
     this->okno->display();
-
 }
